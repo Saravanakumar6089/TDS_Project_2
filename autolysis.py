@@ -160,6 +160,7 @@ def interact_with_llm(filename, df, max_tokens=1500):
     Important: Your code should NOT print out anything.
     Also ensure that your code does NOT generate any plots / figures (but your code can give aids for visualisation of data, e.g. corr matrix instead of heatmap)
     Do generic analysis that will apply to all datasets. For example, summary statistics, counting missing values, correlation matrices, outliers, clustering, hierarchy detection, etc.
+    Use chardet library appropriately to handle character encoding related errors while your code tries reading the dataset
     1. Analyze the dataset to uncover meaningful insights. Focus on:
       - Outlier and anomaly detection (e.g., errors, high-impact opportunities)
       - Correlation and regression analysis (e.g., identifying relationships and key predictors)(Use df.corr() with numeric_only=True)
@@ -233,14 +234,14 @@ def interact_with_llm(filename, df, max_tokens=1500):
     executed_results["summary"] = summary_stats
     executed_results["missing_values"] = missing_values
     return executed_results
-
+folder=""
 def visualize_results(analysis_results):
     visualizations = []
-
+    global folder
     if "correlation_matrix" in analysis_results:
         plt.figure(figsize=(6, 6))  # Set size to 512x512 px
         sns.heatmap(analysis_results["correlation_matrix"], annot=True, cmap="coolwarm", fmt=".2f")
-        correlation_image = "correlation_matrix.png"
+        correlation_image = folder+"/correlation_matrix.png"
         plt.savefig(correlation_image, dpi=96)  # Ensure 512x512 px resolution
         visualizations.append(correlation_image)
         plt.close()
@@ -248,7 +249,7 @@ def visualize_results(analysis_results):
     if "outliers" in analysis_results:
         plt.figure(figsize=(6, 6))  # Set size to 512x512 px
         sns.boxplot(data=analysis_results["outliers"])
-        outliers_image = "outliers.png"
+        outliers_image = folder+"/outliers.png"
         plt.savefig(outliers_image, dpi=96)  # Ensure 512x512 px resolution
         visualizations.append(outliers_image)
         plt.close()
@@ -260,7 +261,7 @@ def visualize_results(analysis_results):
             y=analysis_results["clusters"]["y"],
             hue=analysis_results["clusters"]["labels"]
         )
-        clusters_image = "clusters.png"
+        clusters_image = folder+"/clusters.png"
         plt.savefig(clusters_image, dpi=96)  # Ensure 512x512 px resolution
         visualizations.append(clusters_image)
         plt.close()
@@ -270,6 +271,7 @@ def visualize_results(analysis_results):
 
 def generate_story_from_analysis(filename, analysis_results):
     # Extract analysis details
+    
     summary_stats = analysis_results.get("summary")
     missing_values = analysis_results.get("missing_values")
     correlations = analysis_results.get("correlations").to_dict() if analysis_results.get("correlations") is not None else "N/A"
@@ -341,6 +343,7 @@ import sys
 import os
 import pandas as pd
 import base64
+import chardet
 # Main function
 def main():
     if len(sys.argv) != 2:
@@ -353,9 +356,14 @@ def main():
         print(f"Error: File '{filename}' not found.")
         sys.exit(1)
 
+    with open(filename, 'rb') as file:
+        result = chardet.detect(file.read())  # Read a portion of the file
+        detected_encoding = result['encoding']
     # Load the dataset
     try:
-        df = pd.read_csv(filename)
+        df = pd.read_csv(filename,encoding=detected_encoding)
+        global folder
+        folder = os.path.dirname(filename)
     except Exception as e:
         print(f"Error loading dataset: {e}")
         sys.exit(1)
@@ -385,21 +393,22 @@ def main():
         readme_content = generate_story_from_analysis(filename, analysis_results)
         readme_content += "\n\n## Visualizations\n"
 
+        
         # Embed Correlation Matrix as Base64
-        if os.path.isfile("correlation_matrix.png"):
-            with open("correlation_matrix.png", "rb") as img_file:
+        if os.path.isfile(folder+"/correlation_matrix.png"):
+            with open(folder+"/correlation_matrix.png", "rb") as img_file:
                 correlation_matrix_base64 = base64.b64encode(img_file.read()).decode('utf-8')
             readme_content += "### Correlation Matrix\n"
             readme_content += f"![Correlation Matrix](data:image/png;base64,{correlation_matrix_base64})\n\n"
 
         # Embed Outliers Detection as Base64
-        if os.path.isfile("outliers.png"):
-            with open("outliers.png", "rb") as img_file:
+        if os.path.isfile(folder+"/outliers.png"):
+            with open(folder+"/outliers.png", "rb") as img_file:
                 outliers_base64 = base64.b64encode(img_file.read()).decode('utf-8')
             readme_content += "### Outlier Detection\n"
             readme_content += f"![Outlier Detection](data:image/png;base64,{outliers_base64})\n\n"
 
-        with open("README.md", "w") as readme_file:
+        with open(folder+"/README.md", "w") as readme_file:
             readme_file.write(readme_content)
         
         print("Analysis completed successfully.")
